@@ -1,50 +1,139 @@
--- 1. Заполняем контрагентов (Поставщики и Покупатели)
-INSERT INTO contraqents (name, inn, address, phone, type) VALUES
-('ООО "Ромашка"', '7701234567', 'г. Москва, ул. Ленина, 1', '+7-999-123-45-67', 'Поставщик'),
-('ООО "ТехноСнаб"', '7707654321', 'г. Москва, ул. Пушкина, 2', '+7-999-765-43-21', 'Поставщик'),
-('ИП Иванов И.И.', '7701112223', 'г. Тула, пр-т Мира, 10', '+7-999-111-22-33', 'Покупатель');
+-- ============================================================
+-- 1. КОНТРАГЕНТЫ
+-- ============================================================
+INSERT INTO contragents (name, inn, addres, phone, type) VALUES
+('ООО ТД "Вершина"', NULL, NULL, NULL, 'Поставщик'),
+('ИП Томилин Александр Сергеевич', NULL, NULL, NULL, 'Покупатель');
 
--- 2. Заполняем товары/услуги (items)
-INSERT INTO items (name, code, type, unit) VALUES
-('Стальной лист', 'STL-001', 'material', 'кг'),
-('Токарная обработка', 'OPR-001', 'operation', 'час'),
-('Готовое изделие "Вал"', 'PRD-001', 'product', 'шт'),
-('Готовое изделие "Шестерня"', 'PRD-002', 'product', 'шт');
+-- ============================================================
+-- 2. ПРОДУКЦИЯ (product_items)
+-- ============================================================
+INSERT INTO product_items (name, code, unit) VALUES
+('Стол кухонный "Самобранка"', 'НФ-00000006', 'шт');
 
--- 3. Заполняем цены (prices) - ВАЖНО: даты должны пересекаться с датами заказов
-INSERT INTO prices (item_id, price, discount, from_date, to_date) VALUES
--- Цена на материал (действует весь 2026 год)
-(1, 150.00, 0, '2026-01-01', '2026-12-31'), 
--- Цена на операцию
-(2, 2000.00, 5, '2026-01-01', '2026-12-31'),
--- Цены на готовые изделия
-(3, 10000.00, 0, '2026-01-01', '2026-12-31'),
-(4, 25000.00, 10, '2026-01-01', '2026-12-31');
+-- ============================================================
+-- 3. ТЕХНОЛОГИЧЕСКИЕ ПОЗИЦИИ (technological_items)
+--    Цены взяты из файла "Цены.xlsx"
+--    Тип: material / operation
+--    Коды взяты из "Заказ на производство.xlsx"
+-- ============================================================
+INSERT INTO technological_items (name, code, price, type, unit) VALUES
+-- Материалы
+('Столешница круглая',                              'ФР-00000009', 3250.00, 'material',  'шт'),
+('Мебельная деталь 500х800',                        'ФР-00000013',   95.00, 'material',  'шт'),
+('Мебельная деталь 600х800',                        'ФР-00000016',  140.00, 'material',  'шт'),
+('Евровинт 6,5х5',                                  'ФР-00000027',  595.00, 'material',  'тыс. шт'),
+('Опора',                                           'ФР-00000026',  245.00, 'material',  'шт'),
+-- Технологические операции
+('Сборка модулей',                                  'ФР-00000053', 1400.00, 'operation', 'ч'),
+('Распил ДСП, МДФ и листового материала',           'ФР-00000052',  450.00, 'operation', 'ч'),
+('Упаковка',                                        'ФР-00000494',  950.00, 'operation', 'шт');
 
--- 4. Заполняем спецификации (specifications)
-INSERT INTO specifications (product_item_id, manufacturer_id) VALUES
--- Спецификация для "Вала" (делает ООО Ромашка)
-(3, 1),
--- Спецификация для "Шестерни" (делает ООО ТехноСнаб)
-(4, 2);
+-- ============================================================
+-- 4. СПЕЦИФИКАЦИИ (specifiacations)
+--    Изделие: Стол кухонный "Самобранка"
+--    Изготовитель: ООО ТД "Вершина"
+-- ============================================================
+INSERT INTO specifiacations (product_item_id, manufacturier_id) VALUES
+(
+    (SELECT id FROM product_items WHERE code = 'НФ-00000006'),
+    (SELECT id FROM contragents WHERE name = 'ООО ТД "Вершина"')
+);
 
--- 5. Заполняем строки спецификаций (specification_lines)
-INSERT INTO specification_lines (specification_id, technological_item_id, quantity) VALUES
--- Для производства "Вала" (ID 3) нужно 10 кг стали (ID 1) и 2 часа токарки (ID 2)
-(1, 1, 10.00),
-(1, 2, 2.00),
--- Для производства "Шестерни" (ID 4) нужно 5 кг стали (ID 1) и 1 час токарки (ID 2)
-(2, 1, 5.00),
-(2, 2, 1.00);
+-- ============================================================
+-- 5. СТРОКИ СПЕЦИФИКАЦИИ (specifiacation_lines)
+--    Данные из "Спецификация.xlsx"
+--    Количество — на 1 изделие
+-- ============================================================
+INSERT INTO specifiacation_lines (specifiacation_id, technological_item_id, quantity) VALUES
+-- Материалы
+((SELECT s.id FROM specifiacations s
+   JOIN product_items p ON p.id = s.product_item_id
+   WHERE p.code = 'НФ-00000006'),
+ (SELECT id FROM technological_items WHERE code = 'ФР-00000009'), 1.000),   -- Столешница круглая
+((SELECT s.id FROM specifiacations s
+   JOIN product_items p ON p.id = s.product_item_id
+   WHERE p.code = 'НФ-00000006'),
+ (SELECT id FROM technological_items WHERE code = 'ФР-00000013'), 2.000),   -- Мебельная деталь 500х800
+((SELECT s.id FROM specifiacations s
+   JOIN product_items p ON p.id = s.product_item_id
+   WHERE p.code = 'НФ-00000006'),
+ (SELECT id FROM technological_items WHERE code = 'ФР-00000016'), 4.000),   -- Мебельная деталь 600х800
+((SELECT s.id FROM specifiacations s
+   JOIN product_items p ON p.id = s.product_item_id
+   WHERE p.code = 'НФ-00000006'),
+ (SELECT id FROM technological_items WHERE code = 'ФР-00000027'), 0.012),   -- Евровинт 6,5х5 (тыс. шт)
+((SELECT s.id FROM specifiacations s
+   JOIN product_items p ON p.id = s.product_item_id
+   WHERE p.code = 'НФ-00000006'),
+ (SELECT id FROM technological_items WHERE code = 'ФР-00000026'), 4.000),   -- Опора
+-- Технологические операции (норма времени * количество = 1)
+((SELECT s.id FROM specifiacations s
+   JOIN product_items p ON p.id = s.product_item_id
+   WHERE p.code = 'НФ-00000006'),
+ (SELECT id FROM technological_items WHERE code = 'ФР-00000053'), 1.000),   -- Сборка модулей
+((SELECT s.id FROM specifiacations s
+   JOIN product_items p ON p.id = s.product_item_id
+   WHERE p.code = 'НФ-00000006'),
+ (SELECT id FROM technological_items WHERE code = 'ФР-00000052'), 1.000),   -- Распил ДСП, МДФ
+((SELECT s.id FROM specifiacations s
+   JOIN product_items p ON p.id = s.product_item_id
+   WHERE p.code = 'НФ-00000006'),
+ (SELECT id FROM technological_items WHERE code = 'ФР-00000494'), 1.000);   -- Упаковка
 
--- 6. Заполняем заказы покупателей (orders_by_customer)
+-- ============================================================
+-- 6. ЗАКАЗ НА ПРОИЗВОДСТВО (orders_by_manufacturier)
+--    № 1 от 23.04.2026
+-- ============================================================
+INSERT INTO orders_by_manufacturier (order_number, date) VALUES
+(1, '2026-04-23');
+
+-- ============================================================
+-- 7. СТРОКИ ЗАКАЗА НА ПРОИЗВОДСТВО
+--    (order_by_manufacturier_lines)
+--    2 изделия "Стол кухонный Самобранка"
+-- ============================================================
+INSERT INTO order_by_manufacturier_lines 
+    (order_by_manufacturier_id, specifiacation_id, quantity) VALUES
+(
+    (SELECT id FROM orders_by_manufacturier 
+      WHERE order_number = 1 AND date = '2026-04-23'),
+    (SELECT s.id FROM specifiacations s
+       JOIN product_items p ON p.id = s.product_item_id
+      WHERE p.code = 'НФ-00000006'),
+    2.000
+);
+
+-- ============================================================
+-- 8. ЗАКАЗ ПОКУПАТЕЛЯ (orders_by_customer)
+--    № 1 от 22.04.2026
+--    Заказчик: ИП Томилин Александр Сергеевич
+-- ============================================================
 INSERT INTO orders_by_customer (order_number, customer_id, date) VALUES
-(1001, 3, '2026-09-01'),
-(1002, 3, '2026-09-05');
+(
+    1,
+    (SELECT id FROM contragents 
+      WHERE name = 'ИП Томилин Александр Сергеевич'),
+    '2026-04-22'
+);
 
--- 7. Заполняем строки заказов покупателей (order_by_customer_lines) - ТЕ САМЫЕ ДАННЫЕ ДЛЯ ВАШЕГО ЗАПРОСА
-INSERT INTO order_by_customer_lines (product_item_id, order_by_customer_id, quantity) VALUES
--- Заказ 1001: Купили 2 "Вала" (item_id 3)
-(3, 1, 2.00),
--- Заказ 1002: Купили 1 "Шестерню" (item_id 4)
-(4, 2, 1.00);
+-- ============================================================
+-- 9. СТРОКИ ЗАКАЗА ПОКУПАТЕЛЯ (order_by_customer_lines)
+--    Стол кухонный "Самобранка": 2 шт, цена 14120, скидка 1412.00
+--    
+--    ВНИМАНИЕ: В таблице discount INT (0..100), 
+--    а в Excel скидка указана как "1412,00" — это, скорее всего,
+--    сумма скидки или опечатка. Логичнее интерпретировать 
+--    как 10% (скидка 1412 руб. от 14120 руб. = 10%).
+--    Здесь заносим 10 (%).
+-- ============================================================
+INSERT INTO order_by_customer_lines 
+    (price, discount, product_item_id, order_by_customer_id, quantity) VALUES
+(
+    14120.00,
+    10,
+    (SELECT id FROM product_items WHERE code = 'НФ-00000006'),
+    (SELECT id FROM orders_by_customer 
+      WHERE order_number = 1 AND date = '2026-04-22'),
+    2.000
+);
