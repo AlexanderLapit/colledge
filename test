@@ -1,120 +1,232 @@
-import gradio as gr
-import re
+from sqlalchemy import (
+    Column, Integer, String, Numeric, Date, DateTime, Boolean, Text,
+    ForeignKey, CheckConstraint, UniqueConstraint
+)
+from sqlalchemy.orm import declarative_base, relationship
 
-# "База данных" пользователей (в реальном проекте — БД)
-users_db = {}
-
-def register(username, email, password, confirm, age, gender, agree):
-    # Проверка обязательных полей
-    if not username or not email or not password:
-        return "❌ Заполните все обязательные поля", ""
-
-    # Проверка длины логина
-    if len(username) < 3:
-        return "❌ Логин должен быть не короче 3 символов", ""
-
-    # Проверка email
-    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-        return "❌ Некорректный email", ""
-
-    # Проверка пароля
-    if len(password) < 6:
-        return "❌ Пароль должен быть не короче 6 символов", ""
-
-    # Совпадение паролей
-    if password != confirm:
-        return "❌ Пароли не совпадают", ""
-
-    # Согласие с условиями
-    if not agree:
-        return "❌ Необходимо согласиться с условиями", ""
-
-    # Проверка на существующего пользователя
-    if username in users_db:
-        return f"❌ Пользователь '{username}' уже существует", ""
-
-    # Сохраняем (в реальном проекте — хешировать пароль!)
-    users_db[username] = {
-        "email": email,
-        "age": age,
-        "gender": gender,
-    }
-
-    info = (
-        f"✅ Регистрация успешна!\n\n"
-        f"👤 Логин: {username}\n"
-        f"📧 Email: {email}\n"
-        f"🎂 Возраст: {age}\n"
-        f"⚧ Пол: {gender}\n"
-        f"👥 Всего пользователей: {len(users_db)}"
-    )
-    return "✅ Успешно", info
+Base = declarative_base()
 
 
-def clear_form():
-    return "", "", "", "", 18, None, False, "", ""
+class Contragent(Base):
+    __tablename__ = "contragents"
 
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), nullable=False)
+    inn = Column(String(20))
+    addres = Column(String(200))
+    phone = Column(String(20))
+    type = Column(String(20), nullable=False)
 
-with gr.Blocks(title="Регистрация", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("# 📝 Форма регистрации")
-    gr.Markdown("Заполните поля ниже и нажмите **Зарегистрироваться**")
-
-    with gr.Row():
-        with gr.Column(scale=1):
-            username = gr.Textbox(
-                label="Логин *",
-                placeholder="Введите логин (мин. 3 символа)"
-            )
-            email = gr.Textbox(
-                label="Email *",
-                placeholder="example@mail.com"
-            )
-            password = gr.Textbox(
-                label="Пароль *",
-                type="password",
-                placeholder="Минимум 6 символов"
-            )
-            confirm = gr.Textbox(
-                label="Подтвердите пароль *",
-                type="password",
-                placeholder="Повторите пароль"
-            )
-            age = gr.Slider(
-                minimum=14, maximum=100, value=18, step=1,
-                label="Возраст"
-            )
-            gender = gr.Radio(
-                choices=["Мужской", "Женский", "Не указан"],
-                value="Не указан",
-                label="Пол"
-            )
-            agree = gr.Checkbox(
-                label="Я согласен с условиями использования *"
-            )
-
-            with gr.Row():
-                btn_submit = gr.Button("Зарегистрироваться", variant="primary")
-                btn_clear = gr.Button("Очистить")
-
-        with gr.Column(scale=1):
-            status = gr.Textbox(label="Статус", interactive=False)
-            result = gr.Textbox(
-                label="Данные пользователя",
-                lines=8,
-                interactive=False
-            )
-
-    # Обработчики
-    btn_submit.click(
-        fn=register,
-        inputs=[username, email, password, confirm, age, gender, agree],
-        outputs=[status, result]
+    __table_args__ = (
+        CheckConstraint("type in ('Поставщик', 'Покупатель')", name="contragents_type_check"),
     )
 
-    btn_clear.click(
-        fn=clear_form,
-        inputs=[],
-        outputs=[username, email, password, confirm, age, gender, agree, status, result]
+    specifications = relationship("Specification", back_populates="manufacturier")
+    orders_by_customer = relationship("OrderByCustomer", back_populates="customer")
+
+
+class Item(Base):
+    __tablename__ = "items"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), nullable=False)
+    code = Column(String(200))
+    type = Column(String(20), nullable=False)
+    unit = Column(String(20))
+
+    __table_args__ = (
+        CheckConstraint("type in ('product', 'material', 'operation')", name="items_type_check"),
     )
 
-demo.launch()
+    prices = relationship("Price", back_populates="item")
+    specifications_as_product = relationship(
+        "Specification", back_populates="product_item"
+    )
+    specification_lines = relationship(
+        "SpecificationLine", back_populates="technological_item"
+    )
+    order_by_customer_lines = relationship(
+        "OrderByCustomerLine", back_populates="product_item"
+    )
+
+
+class Price(Base):
+    __tablename__ = "prices"
+
+    id = Column(Integer, primary_key=True)
+    item_id = Column(
+        Integer,
+        ForeignKey("items.id", onupdate="CASCADE", ondelete="CASCADE"),
+        nullable=False,
+    )
+    price = Column(Numeric(12, 2), nullable=False)
+    discount = Column(Integer, nullable=False)
+    from_date = Column(Date, nullable=False)
+    to_date = Column(Date, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("price >= 0", name="prices_price_check"),
+        CheckConstraint("discount >= 0 and discount <= 100", name="prices_discount_check"),
+    )
+
+    item = relationship("Item", back_populates="prices")
+
+
+class Specification(Base):
+    __tablename__ = "specifiacations"
+
+    id = Column(Integer, primary_key=True)
+    product_item_id = Column(
+        Integer,
+        ForeignKey("items.id", onupdate="CASCADE", ondelete="CASCADE"),
+        nullable=False,
+    )
+    manufacturier_id = Column(
+        Integer,
+        ForeignKey("contragents.id", onupdate="CASCADE", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    product_item = relationship("Item", back_populates="specifications_as_product")
+    manufacturier = relationship("Contragent", back_populates="specifications")
+    lines = relationship(
+        "SpecificationLine", back_populates="specification", cascade="all, delete-orphan"
+    )
+    order_lines = relationship("OrderByManufacturierLine", back_populates="specification")
+
+
+class SpecificationLine(Base):
+    __tablename__ = "specifiacation_lines"
+
+    id = Column(Integer, primary_key=True)
+    specifiacation_id = Column(
+        Integer,
+        ForeignKey("specifiacations.id", onupdate="CASCADE", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # technological item это операция или материал
+    technological_item_id = Column(
+        Integer,
+        ForeignKey("items.id", onupdate="CASCADE", ondelete="CASCADE"),
+        nullable=False,
+    )
+    quantity = Column(Numeric(12, 3), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="specification_lines_quantity_check"),
+    )
+
+    specification = relationship("Specification", back_populates="lines")
+    technological_item = relationship("Item", back_populates="specification_lines")
+
+
+class OrderByManufacturier(Base):
+    __tablename__ = "orders_by_manufacturier"
+
+    id = Column(Integer, primary_key=True)
+    order_number = Column(Integer, nullable=False)
+    date = Column(Date, nullable=False)
+
+    lines = relationship(
+        "OrderByManufacturierLine",
+        back_populates="order",
+        cascade="all, delete-orphan",
+    )
+
+
+class OrderByManufacturierLine(Base):
+    __tablename__ = "order_by_manufacturier_lines"
+
+    id = Column(Integer, primary_key=True)
+    order_by_manufacturier_id = Column(
+        Integer,
+        ForeignKey("orders_by_manufacturier.id", onupdate="CASCADE", ondelete="CASCADE"),
+        nullable=False,
+    )
+    specifiacation_id = Column(
+        Integer,
+        ForeignKey("specifiacations.id", onupdate="CASCADE", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    quantity = Column(Numeric(12, 3), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="order_by_manufacturier_lines_quantity_check"),
+    )
+
+    order = relationship("OrderByManufacturier", back_populates="lines")
+    specification = relationship("Specification", back_populates="order_lines")
+
+
+class OrderByCustomer(Base):
+    __tablename__ = "orders_by_customer"
+
+    id = Column(Integer, primary_key=True)
+    order_number = Column(Integer, nullable=False)
+    customer_id = Column(
+        Integer,
+        ForeignKey("contragents.id", onupdate="CASCADE", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    date = Column(Date, nullable=False)
+
+    customer = relationship("Contragent", back_populates="orders_by_customer")
+    lines = relationship(
+        "OrderByCustomerLine",
+        back_populates="order",
+        cascade="all, delete-orphan",
+    )
+
+
+class OrderByCustomerLine(Base):
+    __tablename__ = "order_by_customer_lines"
+
+    id = Column(Integer, primary_key=True)
+    product_item_id = Column(
+        Integer,
+        ForeignKey("items.id", onupdate="CASCADE", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    order_by_customer_id = Column(
+        Integer,
+        ForeignKey("orders_by_customer.id", onupdate="CASCADE", ondelete="CASCADE"),
+        nullable=False,
+    )
+    quantity = Column(Numeric(12, 3), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="order_by_customer_lines_quantity_check"),
+    )
+
+    product_item = relationship("Item", back_populates="order_by_customer_lines")
+    order = relationship("OrderByCustomer", back_populates="lines")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    login = Column(String(50), unique=True)
+    password_hash = Column(String(255))
+    role = Column(String(20))
+    is_blocked = Column(Boolean)
+    failed_attempts = Column(Integer)
+    blocked_until = Column(DateTime)
+    created_at = Column(DateTime)
+
+    notes = relationship("Note", back_populates="user", cascade="all, delete-orphan")
+
+
+class Note(Base):
+    __tablename__ = "notes"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String(255))
+    content = Column(Text)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", onupdate="CASCADE", ondelete="CASCADE"),
+    )
+    created_at = Column(DateTime)
+
+    user = relationship("User", back_populates="notes")
